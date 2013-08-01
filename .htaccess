@@ -1,0 +1,16 @@
+# rewrite URLs. 
+RewriteEngine on
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ XCore.php/$1 [QSA,PT,L]
+
+# Turn of indexes. 
+Options -Indexes
+
+# Protect configuration files. 
+<Files ~ "\.(cnf|config)$">
+   Order Allow,Deny
+   Deny from all
+</Files>
+
+DirectoryIndex "XCore.php"

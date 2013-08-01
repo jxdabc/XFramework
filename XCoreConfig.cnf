@@ -1,0 +1,8 @@
+<?php
+	self::$classPath 
+		= array('XCoreClass', 'XClass', 'MODEL', 'MyClass');
+	self::$configFile = 'config/config.cnf';
+	self::$commonFile = 'common/common.php';
+//	self::$defaultAction = 'main/main';
+	self::$debug = 'true';
+?>
