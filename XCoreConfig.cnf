@@ -4,5 +4,7 @@
 	self::$configFile = 'config/config.cnf';
 	self::$commonFile = 'common/common.php';
 //	self::$defaultAction = 'main/main';
+//	self::$errorPages[500] = 'Error';
+//	self::$errorPages[404] = 'Error';
 	self::$debug = 'true';
 ?>
