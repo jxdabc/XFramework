@@ -210,7 +210,7 @@
 				(XCoreConfig::isDebug() ? 
 				$obj->getUserInfo() : $obj->getMessage());
 
-			throw new XDBException($errorMessage);
+			throw new XDBException($errorMessage, $obj->getCode());
 		}
 
 		private function buildSQL($sql, $values)
