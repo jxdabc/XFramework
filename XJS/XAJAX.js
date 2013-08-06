@@ -61,7 +61,7 @@ var XAJAX =
 				}
 				else
 				{
-					try { console.log('' + ajax.status + ' ' + ajax.statusText); } catch (e) {}
+					try { console.log('' + ajax.status + ' ' + ajax.statusText + ' ' + ajax.responseText); } catch (e) {}
 					_this.callFailHandlers(ajax.status, ajax.statusText);
 					callback_fail (ajax.status, ajax.statusText);
 				}
