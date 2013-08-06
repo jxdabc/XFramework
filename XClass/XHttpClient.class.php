@@ -13,6 +13,7 @@
 			$this->httpOptions = & $this->context['http'];
 
 			$this->httpOptions['protocol_version'] = '1.1';
+			$this->httpOptions['ignore_errors'] = true;
 
 			$this->responsedHeader = '';
 			$this->responsedContent = '';
@@ -68,6 +69,11 @@
 			return $this->responsedHeader;
 		}
 
+		public function getStatus()
+		{
+			return $this->status;
+		}
+
 
 		private function buildRequestHeader($contentType = NULL)
 		{
@@ -96,10 +102,15 @@
 
 			$this->responsedContent = $rtn;
 			$this->responsedHeader = $http_response_header;
+
+			$this->status = $this->responsedHeader[0];
+			$this->status = explode(' ', $this->status);
+			$this->status = (int)trim($this->status[1]);
 		}
 
 		private $responsedHeader;
 		private $responsedContent;
+		private $status;
 		
 		private $host;
 		private $cookies;
