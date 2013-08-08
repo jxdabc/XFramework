@@ -1,48 +1,41 @@
-<?php @require_once('MDB2.php'); ?>
 <?php
 	class XDBException extends XException {}
 ?>
 <?php
 	class XDBResult
 	{
-		public function __construct($result)
+		public function __construct($db, $result)
 		{
+			$this->db = $db;
 			$this->result = $result;
 		}
 
 		public function fetchRow($asAssociate = true)
 		{
-			$row = $this->result->fetchRow($asAssociate ? 
-				MDB2_FETCHMODE_ASSOC : MDB2_FETCHMODE_ORDERED);
+			$row = $this->result->fetch($asAssociate ? 
+				PDO::FETCH_ASSOC : PDO::FETCH_NUM);
 
-			XDB::throwOnError($row, 'Fetching the row falied: ');
+			$this->db->throwOnError($row, 'Fetching the row falied: ');
 
 			return $row;
 		}
 
 		public function free()
 		{
-			$this->result->free();
+			$this->result->closeCursor();
 		}
 
+		private $db;
 		private $result;
 	}
 ?>
 <?php
 	class XDB 
 	{
-		public static function registerDB ($name, $DSN)
+		public static function registerDB ($name, $DSN, $username, $password)
 		{
-			$options = array (
-				'debug' => XCoreConfig::isDebug() ? 2 : 0,
-				'persistent' => true
-			);
-			
-			@$db = MDB2::factory($DSN, $options);
-
-			self::throwOnError($db, 'Creating the DB object failed: ');
-
-			return self::$connects[$name] = new XDB($db);
+			return self::$connects[$name] 
+				= new XDB($DSN, $username, $password);
 		}
 
 		public static function getDB ($name)
@@ -55,15 +48,25 @@
 
 		private static $connects = array();
 
-		public function __construct ($db)
+		public function __construct ($DSN, $username, $password, $options = NULL)
 		{
-			$this->db = $db;
+			if ($options === NULL)
+				$options = array (
+					PDO::ATTR_PERSISTENT => true
+				);
+
+			$this->DSN = $DSN;
+			$this->username = $username;
+			$this->password = $password;
+			$this->options = $options;
 		}
 
 		public function execute($sql, $values = array()) 
 		{
+			$this->connect();
+
 			$sql = $this->buildSQL($sql, $values);
-			@$affectedRows = $this->db->exec($sql);
+			$affectedRows = $this->db->exec($sql);
 			self::throwOnError($affectedRows, 'Executing falied: ');
 
 			return $affectedRows;
@@ -71,37 +74,52 @@
 
 		public function query($sql, $values = array())
 		{
+			$this->connect();
+
 			$sql = $this->buildSQL($sql, $values);
-			@$result = $this->db->query($sql);
+			$result = $this->db->query($sql);
 			self::throwOnError($result, 'Querying falied: ');
 
-			return new XDBResult($result);
+			return new XDBResult($this, $result);
 		}
 
 		public function queryAll($sql, $values = array(), $asAssociate = true)
 		{
+			$this->connect();
+
 			$sql = $this->buildSQL($sql, $values);
-			@$result = $this->db->queryAll($sql, NULL, $asAssociate ? 
-				MDB2_FETCHMODE_ASSOC : MDB2_FETCHMODE_ORDERED);
+			$result = $this->db->query($sql);
 			self::throwOnError($result, 'Querying falied: ');
+
+			$result = $result->fetchAll($asAssociate ? 
+				PDO::FETCH_ASSOC : PDO::FETCH_NUM);
+			self::throwOnError($result, 'Fetching all rows falied: ');
+
 			return $result;
 		}
 
 		public function queryCol($sql, $values = array())
 		{
+			$this->connect();
+
 			$sql = $this->buildSQL($sql, $values);
-			@$result = $this->db->queryCol($sql);
+			$result = $this->db->query($sql);
 			self::throwOnError($result, 'Querying falied: ');
+
+			$result = $result->fetchAll(PDO::FETCH_COLUMN, 0);
+			self::throwOnError($result, 'Fetching all rows falied: ');
+
 			return $result;
 		}
 
 		public function queryRow($sql, $values = array(), $asAssociate = true)
 		{
-			$sql = $this->buildSQL($sql, $values);
-			@$result = $this->db->queryRow($sql, null, $asAssociate ? 
-				MDB2_FETCHMODE_ASSOC : MDB2_FETCHMODE_ORDERED);
-			self::throwOnError($result, 'Querying falied: ');
-			return $result;
+			$result = $this->query($sql, $values);
+
+			$row = $result->fetchRow($asAssociate);
+			$result->free();
+
+			return $row;
 		}
 
 		public function queryOne($sql, $values = array())
@@ -180,40 +198,37 @@
 				array($obj->$PK));
 		}
 
-		public function listTableFields($table)
+		public function throwOnError($obj, $msg = '')
 		{
-			self::throwOnError(@$this->db->loadModule('Manager'), 
-				'Loadding Manager module failed: ');
-			$fields = @$this->db->manager->listTableFields($table);
-			self::throwOnError($fields, 'Getting table fields failed: ');
-
-			self::throwOnError(@$this->db->loadModule('Reverse', null, true),
-				'Loadding Reverse module failed: ');
-
-			foreach ($fields as $field) 
-			{
-				$def = @$this->db->getTableFieldDefinition($table, $field);
-				self::throwOnError($def,
-				"Getting the definition for {$table}.{$field} failed: ");
-				$result[$field] = $def[0];
-			}
-			
-			return $result;
-		}
-
-		public static function throwOnError($obj, $msg = '')
-		{
-			if (@!MDB2::isError($obj))
+			if ($obj !== FALSE)
 				return;
 
-			$errorMessage = $msg . 
-				(XCoreConfig::isDebug() ? 
-				$obj->getUserInfo() : $obj->getMessage());
+			$errorInfo = $this->db->errorInfo();
 
-			throw new XDBException($errorMessage, $obj->getCode());
+			$errorMessage = $msg . $errorInfo[2];
+
+			throw new XDBException($errorMessage, $errorInfo[1]);
 		}
 
-		private function buildSQL($sql, $values)
+		public function connect()
+		{
+			if ($this->connected)
+				return;
+
+			$this->connected = true;
+
+			try 
+			{
+				$this->db = 
+					new PDO($this->DSN, $this->username, $this->password, $this->options);
+			}
+			catch (PDOException $e)
+			{
+				throw new XDBException($e->getMessage(), $e->getCode());
+			}
+		}
+
+		public function buildSQL($sql, $values)
 		{
 			$tokens = preg_split('/((?<!\\\\)\\?)/', $sql, -1,
 				PREG_SPLIT_DELIM_CAPTURE);
@@ -230,17 +245,32 @@
 				if ($v == '?')
 				{
 					$value = $values[$valueIndex++];
-					if (is_string($value) && $value == '')
-						$tokens[$k] = '\'\'';
-					else
-						@$tokens[$k] = (string)
-						$this->db->quote($value);
+					$tokens[$k] = $this->quote($value);
 				}
 				else
 					$tokens[$k] = str_replace('\\?', '?', $v);
 
 			return implode($tokens);
 		}
+
+		private function quote($val)
+		{
+			if (is_int($val) || is_float($val))
+				return (string)$val;
+			if (is_string($val))
+				return $this->db->quote($val);
+			if (is_null($val))
+				return 'NULL';
+
+			throw new XDBException
+				('Quote failed with unsupported type. ');			
+		}
+
+		private $connected = false;
+		private $DSN;
+		private $username;
+		private $password;
+		private $options;
 
 		private $db;
 	}
