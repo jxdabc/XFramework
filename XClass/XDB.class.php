@@ -4,9 +4,8 @@
 <?php
 	class XDBResult
 	{
-		public function __construct($db, $result)
+		public function __construct($result)
 		{
-			$this->db = $db;
 			$this->result = $result;
 		}
 
@@ -14,8 +13,6 @@
 		{
 			$row = $this->result->fetch($asAssociate ? 
 				PDO::FETCH_ASSOC : PDO::FETCH_NUM);
-
-			$this->db->throwOnError($row, 'Fetching the row falied: ');
 
 			return $row;
 		}
@@ -25,7 +22,6 @@
 			$this->result->closeCursor();
 		}
 
-		private $db;
 		private $result;
 	}
 ?>
@@ -80,7 +76,7 @@
 			$result = $this->db->query($sql);
 			self::throwOnError($result, 'Querying falied: ');
 
-			return new XDBResult($this, $result);
+			return new XDBResult($result);
 		}
 
 		public function queryAll($sql, $values = array(), $asAssociate = true)
@@ -109,6 +105,9 @@
 			$result = $result->fetchAll(PDO::FETCH_COLUMN, 0);
 			self::throwOnError($result, 'Fetching all rows falied: ');
 
+			if (count($result) == 0)
+				$result = NULL;
+
 			return $result;
 		}
 
@@ -119,14 +118,19 @@
 			$row = $result->fetchRow($asAssociate);
 			$result->free();
 
+			if ($row === FALSE)
+				$row = NULL;
+
 			return $row;
 		}
 
 		public function queryOne($sql, $values = array())
 		{
-			$sql = $this->buildSQL($sql, $values);
-			@$result = $this->db->queryOne($sql);
-			self::throwOnError($result, 'Querying falied: ');
+			$result = $this->queryRow($sql, $values, false);
+
+			if ($result !== NULL)
+				$result = $result[0];
+
 			return $result;
 		}
 
