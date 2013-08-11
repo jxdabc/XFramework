@@ -182,8 +182,9 @@
 			return implode($tokens);
 		}
 
-		abstract public function query($sql, $values = array());
-		abstract public function connect();
+//		PHP 5.3 does not like the follows. Jxd, 2013/8/11
+//		abstract public function query($sql, $values = array());
+//		abstract public function connect();
 		abstract protected function quote($value);
 	}
 
