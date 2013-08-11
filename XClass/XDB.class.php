@@ -2,133 +2,88 @@
 	class XDBException extends XException {}
 ?>
 <?php
-	class XDBResult
+	interface IXDBDB
 	{
-		public function __construct($result)
-		{
-			$this->result = $result;
-		}
+		public function connect();
 
-		public function fetchRow($asAssociate = true)
-		{
-			$row = $this->result->fetch($asAssociate ? 
-				PDO::FETCH_ASSOC : PDO::FETCH_NUM);
+		public function execute($sql, $values = array());
+		public function query($sql, $values = array());
+		public function queryAll($sql, $values = array(), $asAssociate = true);
+		public function queryCol($sql, $values = array());
+		public function queryRow($sql, $values = array(), $asAssociate = true);
+		public function queryOne($sql, $values = array());
 
-			return $row;
-		}
+		public function queryObjects($class, $sql, $values = array());
+		public function insertObject($obj, $table);
+		public function updateObject($obj, $table);
+		public function deleteObject($obj, $table);
+	}
 
-		public function free()
-		{
-			$this->result->closeCursor();
-		}
-
-		private $result;
+	interface IXDBResult
+	{
+		public function fetchRow($asAssociate = true);
+		public function free();
 	}
 ?>
 <?php
-	class XDB 
+
+	abstract class AbstractXDBDB implements IXDBDB
 	{
-		public static function registerDB ($name, $DSN, $username, $password)
+		public function execute($sql, $values = array())
 		{
-			return self::$connects[$name] 
-				= new XDB($DSN, $username, $password);
-		}
+			$result = $this->query($sql, $values);
+			if ($result instanceof IXDBResult)
+				$result->free();
 
-		public static function getDB ($name)
-		{
-			if (!array_key_exists($name, self::$connects))
-				throw new XDBException('DB ' . $name . ' not registered. ');
+			if (is_int($result))
+				return $result;
 
-			return self::$connects[$name];
-		}
-
-		private static $connects = array();
-
-		public function __construct ($DSN, $username, $password, $options = NULL)
-		{
-			if ($options === NULL)
-				$options = array (
-					PDO::ATTR_PERSISTENT => true
-				);
-
-			$this->DSN = $DSN;
-			$this->username = $username;
-			$this->password = $password;
-			$this->options = $options;
-		}
-
-		public function execute($sql, $values = array()) 
-		{
-			$this->connect();
-
-			$sql = $this->buildSQL($sql, $values);
-			$affectedRows = $this->db->exec($sql);
-			self::throwOnError($affectedRows, 'Executing falied: ');
-
-			return $affectedRows;
-		}
-
-		public function query($sql, $values = array())
-		{
-			$this->connect();
-
-			$sql = $this->buildSQL($sql, $values);
-			$result = $this->db->query($sql);
-			self::throwOnError($result, 'Querying falied: ');
-
-			return new XDBResult($result);
+			return 0;
 		}
 
 		public function queryAll($sql, $values = array(), $asAssociate = true)
 		{
-			$this->connect();
+			$rtn = array();
 
-			$sql = $this->buildSQL($sql, $values);
-			$result = $this->db->query($sql);
-			self::throwOnError($result, 'Querying falied: ');
+			$result = $this->query($sql, $values);
+			while ($row = $result->fetchRow($asAssociate))
+				$rtn[] = $row;
 
-			$result = $result->fetchAll($asAssociate ? 
-				PDO::FETCH_ASSOC : PDO::FETCH_NUM);
-			self::throwOnError($result, 'Fetching all rows falied: ');
+			$result->free();
 
-			return $result;
+			return $rtn;
 		}
 
 		public function queryCol($sql, $values = array())
 		{
-			$this->connect();
+			$rtn = array();
 
-			$sql = $this->buildSQL($sql, $values);
-			$result = $this->db->query($sql);
-			self::throwOnError($result, 'Querying falied: ');
+			$result = $this->query($sql, $values);
+			while ($row = $result->fetchRow(false))
+				$rtn[] = $row[0];
 
-			$result = $result->fetchAll(PDO::FETCH_COLUMN, 0);
-			self::throwOnError($result, 'Fetching all rows falied: ');
+			$result->free();
 
-			if (count($result) == 0)
-				$result = NULL;
-
-			return $result;
+			return $rtn;
 		}
 
 		public function queryRow($sql, $values = array(), $asAssociate = true)
 		{
 			$result = $this->query($sql, $values);
 
-			$row = $result->fetchRow($asAssociate);
+			if (!($rtn = $result->fetchRow($asAssociate)))
+				$rtn = NULL;
+
 			$result->free();
 
-			if ($row === FALSE)
-				$row = NULL;
-
-			return $row;
+			return $rtn;
 		}
 
 		public function queryOne($sql, $values = array())
 		{
 			$result = $this->queryRow($sql, $values, false);
 
-			if ($result !== NULL)
+			if ($result)
 				$result = $result[0];
 
 			return $result;
@@ -202,39 +157,7 @@
 				array($obj->$PK));
 		}
 
-		public function throwOnError($obj, $msg = '')
-		{
-			if ($obj !== FALSE)
-				return;
-
-			$errorInfo = $this->db->errorInfo();
-
-			$errorMessage = $msg . $errorInfo[2];
-
-			throw new XDBException($errorMessage, $errorInfo[1]);
-		}
-
-		public function connect()
-		{
-			if ($this->connected)
-				return;
-
-			$this->connected = true;
-
-			try 
-			{
-				// Suppress the 'server gone away' warning message.
-				// Jxd 2013/8/11
-				@$this->db = 
-					new PDO($this->DSN, $this->username, $this->password, $this->options);
-			}
-			catch (PDOException $e)
-			{
-				throw new XDBException($e->getMessage(), $e->getCode());
-			}
-		}
-
-		private function buildSQL($sql, $values)
+		protected function buildSQL($sql, $values) 
 		{
 			$tokens = preg_split('/((?<!\\\\)\\?)/', $sql, -1,
 				PREG_SPLIT_DELIM_CAPTURE);
@@ -244,7 +167,7 @@
 
 			if ($placeHolderCount != count($values))
 				throw new XDBException
-				('BuildSQL failed with place holder value unconformity. ');
+					('BuildSQL failed with place holder value unconformity. ');
 
 			$valueIndex = 0;
 			foreach ($tokens as $k => $v)
@@ -259,25 +182,83 @@
 			return implode($tokens);
 		}
 
-		private function quote($val)
-		{
-			if (is_int($val) || is_float($val))
-				return (string)$val;
-			if (is_string($val))
-				return $this->db->quote($val);
-			if (is_null($val))
-				return 'NULL';
+		abstract public function query($sql, $values = array());
+		abstract public function connect();
+		abstract protected function quote($value);
+	}
 
-			throw new XDBException
-				('Quote failed with unsupported type. ');			
+	class XDBResult
+	{
+		public function __construct($result)
+		{
+			$this->result = $result;
 		}
 
-		private $connected = false;
-		private $DSN;
-		private $username;
-		private $password;
-		private $options;
+		public function fetchRow($asAssociate = true)
+		{
+			$row = $this->result->fetch($asAssociate ? 
+				PDO::FETCH_ASSOC : PDO::FETCH_NUM);
 
-		private $db;
+			return $row;
+		}
+
+		public function free()
+		{
+			$this->result->closeCursor();
+		}
+
+		private $result;
+	}
+?>
+<?php
+	class XDB 
+	{
+		public static function registerDB ($name, $DSN, $username, $password)
+		{
+			return self::$connects[$name] 
+				= self::factory($DSN, $username, $password);
+		}
+
+		public static function getDB ($name)
+		{
+			if (!array_key_exists($name, self::$connects))
+				throw new XDBException('DB ' . $name . ' not registered. ');
+
+			return self::$connects[$name];
+		}
+
+		public static function factory($DSN, $username, $password)
+		{
+			$parsedDSN = self::parseDSN($DSN);
+			$driverClass = 'XDBDriver_' . $parsedDSN['driver'];
+
+			return new $driverClass($parsedDSN, $username, $password);
+		}
+
+		private static function parseDSN($DSN)
+		{
+			$parsedDSN = array();
+
+			$s = explode(':', $DSN);
+			
+			$parsedDSN['driver'] = $s[0];
+			$s = $s[1];
+
+			$s = explode(';', $s);
+			$slen = count($s);
+
+			for ($i = 0; $i < $slen; $i++)
+			{
+				$ss = explode('=', $s[$i]);
+				$k = $ss[0];
+				$v = $ss[1];
+
+				$parsedDSN[$k] = $v;
+			}
+
+			return $parsedDSN;
+		}
+
+		private static $connects = array();
 	}
 ?>
