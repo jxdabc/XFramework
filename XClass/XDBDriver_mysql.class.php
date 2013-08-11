@@ -64,22 +64,25 @@
 				return $this->db->affected_rows;
 		}
 
-		public function queryAll($sql, $values = array(), $asAssociate = true)
-		{
-			$this->connect();
+		// Only mysqlnd support fetch_all method call.
+		// Jxd, 2013/8/11
 
-			$sql = $this->buildSQL($sql, $values);
+		// public function queryAll($sql, $values = array(), $asAssociate = true)
+		// {
+		// 	$this->connect();
 
-			$result = $this->db->query($sql, MYSQLI_USE_RESULT);
+		// 	$sql = $this->buildSQL($sql, $values);
 
-			$this->throwOnError($result, 'Failed to query: ');
+		// 	$result = $this->db->query($sql, MYSQLI_USE_RESULT);
 
-			$all = $result->fetch_all($asAssociate ? MYSQLI_ASSOC : MYSQLI_NUM);
+		// 	$this->throwOnError($result, 'Failed to query: ');
 
-			$this->throwOnError($all, 'Failed to fetch all: ');
+		// 	$all = $result->fetch_all($asAssociate ? MYSQLI_ASSOC : MYSQLI_NUM);
 
-			return $all;
-		}
+		// 	$this->throwOnError($all, 'Failed to fetch all: ');
+
+		// 	return $all;
+		// }
 
 		public function throwOnError($obj, $errorMessageExtra)
 		{
