@@ -223,7 +223,9 @@
 
 			try 
 			{
-				$this->db = 
+				// Suppress the 'server gone away' warning message.
+				// Jxd 2013/8/11
+				@$this->db = 
 					new PDO($this->DSN, $this->username, $this->password, $this->options);
 			}
 			catch (PDOException $e)
@@ -232,7 +234,7 @@
 			}
 		}
 
-		public function buildSQL($sql, $values)
+		private function buildSQL($sql, $values)
 		{
 			$tokens = preg_split('/((?<!\\\\)\\?)/', $sql, -1,
 				PREG_SPLIT_DELIM_CAPTURE);
