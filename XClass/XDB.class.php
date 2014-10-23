@@ -1,4 +1,4 @@
-<?php
+	<?php
 	class XDBException extends XException {}
 ?>
 <?php
@@ -32,6 +32,7 @@
 		public function execute($sql, $values = array())
 		{
 			$result = $this->query($sql, $values);
+//			return;
 			if ($result instanceof IXDBResult)
 				$result->free();
 
@@ -122,7 +123,6 @@
 
 			$sql[0] .= ') '; $sql[1] .= ');';
 			$sql = implode($sql);
-
 			return $this->execute($sql, $values);
 		}
 

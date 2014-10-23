@@ -12,6 +12,7 @@
 			$this->rootPath = XCoreEnv::getBaseRequestURI();
 			$this->basePath = $this->rootPath . $basePath . '/';
 			$this->fullPath = $this->rootPath . $this->tplFile;
+			$this->fileBase = dirname($this->fullPath) . '/';
 
 		}
 

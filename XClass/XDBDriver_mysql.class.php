@@ -51,13 +51,11 @@
 		public function query($sql, $values = array())
 		{
 			$this->connect();
-
+			
 			$sql = $this->buildSQL($sql, $values);
-
 			$result = $this->db->query($sql, MYSQLI_USE_RESULT);
-
 			$this->throwOnError($result, 'Failed to query: ');
-
+			
 			if ($result instanceof mysqli_result)
 				return new XDBDriverResult_mysql($result, $this);
 			else
